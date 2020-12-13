@@ -1,0 +1,202 @@
+---
+title: "SAD with a seed bank"
+author: "Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+   - \usepackage{graphics}
+output:
+  pdf_document:
+  fig_caption: true
+---
+
+# Initial Setup
+```{r results='hide', message=FALSE}
+rm(list=ls())
+setwd("~/GitHub/seedSAD/")
+
+# Save Default Plot Settings
+#opar <- par(no.readonly = TRUE)  # Saves plot defaults
+
+# Import Required Packages
+library("png")
+library("grid")
+#library("vegan")
+#library("labdsv")
+#library("car")
+
+# Import Scripts
+source("bin/DiversityFunctions.r")
+```
+
+# Background
+
+Data are from Evolution Canyon, Israel (Muscrella, Lennon et al. in prep). 
+Evolution canyon has a north-facing, mesic slope and a south-facing, xeric slope.
+On each slope, replicate soil samples were taken.
+We extracted DNA and RNA from each soil sample and sequenced 16S rRNA. 
+Therefore, there is a pair of RNA and DNA sequences for each sample. 
+Here, we construct species abundance curves for each sample. 
+Goal: determine if RNA-based SAD is different from DNA-based SAD. 
+What is the best SAD to fit the data? (lognormal, Zipf, logseries, broken stick)?
+Are parameters for a given model different when comparing RNA and DNA. 
+Xiaotian suggegsts looking into Gambin model.
+Also, Wasserstein distance between each SAD pair applied in deep learning.
+
+# Load data
+
+```{r}
+# Define inputs
+shared <- "data/EC.bac.final.shared"
+design.in <- "data/design.txt"
+level  <-  "0.03"
+
+# Import shared file
+ec_data <- read.otu(shared, "0.03")
+
+# Note: owing to amplification issues, we only sequenced 76 of 80 samples.
+# The four samples not included are C-1E-R, EC-2G-R, EC-2J-R, EC-6I-D
+dim(ec_data)
+counts <- count.groups(otu.matrix = ec_data)
+low.coverage <- counts[which(counts < 50000)]
+
+# Remove low coverage samples 
+ec_data2 <- ec_data[-c(which(rownames(ec_data) %in% c(names(low.coverage)))), ]
+
+# Remove problematic samples (EC_2A_D, EC_2A_R, EC_2C_R, EC_2D_R)
+#ec_data.tmp <- ec_data2[-c(9,20:21,24:27,32,37,74),]
+ec_data3 <- ec_data2[-c(which(rownames(ec_data2) %in% 
+                     c("EC_2A_D", "EC_2A_R","EC_2C_R", "EC_2D_R"))), ]
+
+# Remove OTUs with less than two observations across samples
+ec_data_red <- ec_data3[,which(colSums(ec_data3) >= 5)]
+
+# Rarefied
+floor(min(rowSums(ec_data_red)))
+```
+
+# Load experiment design information
+
+Again, at Evolution Canyon, there are two slopes: 
+The xeric, south-facing slope is referred to as the African Slope (AF)
+The mesic, north-facing slope is referred to as the European Slope (EU)
+
+On each of the slopes, there are two stations:
+On AF, there are stations 1 and 2.
+On EU, there are stations 5 and 6. 
+At each of these stations, there is transect containing 10 sites. 
+
+Reminder, at each site, RNA and DNA were sequenced from a single soil sample. 
+
+```{r}
+# Import design
+design <- read.delim(design.in, header = T, row.names = 1)
+
+# Match OTU matrix and design
+design_red <- design[which(rownames(design) %in% rownames(ec_data_red)),]
+
+# Create factors for model
+slope <- design_red$slope # factor 1
+molecule <- design_red$molecule # factor 2
+paired <- design_red$paired_across_slope
+site <- design_red$site
+station <- design_red$station
+slope.molecule <- data.frame(cbind(as.character(slope),
+                  as.character(molecule))) # Y matrix with factor 1 and 2
+slope.molecule.concat <- do.call(paste, 
+                                 c(slope.molecule[c("X1", "X2")],
+                                   sep = "")) # create unique treat ID vector
+
+# Create a vector of molecules by station
+station.molecule.concat <- paste(station, molecule, sep = "")
+pair.station <- c(rep(seq(1:9), each=2), rep(seq(1:5), each=2), 
+                  rep(seq(1:10), each=2), rep(seq(1:9), each=2))
+```
+
+# Create SADs
+
+```{r}
+# Raw abundance OTU matrix
+otu.matrix <- ec_data_red
+
+# Presence-absence OTU matrix
+dataPA <- (otu.matrix > 0)*1
+
+# Relative abundance OTU matrix
+dataREL <- otu.matrix
+  for(i in 1:nrow(otu.matrix)){
+  dataREL[i,] = otu.matrix[i,]/sum(otu.matrix[i,])
+}
+
+# Log-transform relative abundance matrix
+#dataREL.log <- decostand(dataREL,method="log")
+
+# Function for ranking OTUs
+RAC <- function(x = ""){
+  x = as.vector(x)
+  x.ab = x[x > 0]
+  x.ab.ranked = x.ab[order(x.ab, decreasing = TRUE)]
+  return(x.ab.ranked)
+}
+
+# Apply RA function to relative abundance matrix
+ranks <- apply(dataREL, 1, RAC)
+
+# Convert list of OTU ranks (with different lengths) to a data frame
+rank.df <- sapply(ranks, "length<-", max(lengths(ranks))) 
+
+# Create single rank vector for all samples 
+max.rank <- lengths(ranks)
+rank.vector<- seq(1, max(max.rank),1)
+
+# Parse out DNA and RNA samples
+rank.DNA <- rank.df[,grep("_D", colnames(rank.df), value = TRUE)]
+rank.DNA <- data.frame(rank.vector, rank.DNA)
+
+rank.RNA <- rank.df[,grep("_R", colnames(rank.df), value = TRUE)]
+rank.RNA <- data.frame(rank.vector, rank.RNA)
+```
+
+# Plot SADs
+
+In this section, just plotting all DNA- and RNA-based SADs. 
+Does not take into account station, pairing, etc. 
+
+```{r}
+# set up basic plotting dimensions
+opar <- par(no.readonly = TRUE)  # Saves plot defaults
+par(opar)
+par(mar = c(4.5, 5, 1, 1), oma = c(0.5, 0.5, 0.5, 0.5))
+
+# create plot 
+plot(rank.DNA[,1], rank.DNA[,2],
+     xlim = c(0, 8000), ylim = c(0.000001, 0.1), log = "y", type ="n",
+     las = 1, bg = rgb(0, 0, 1, 0.5), 
+     axes = T, xlab = "", ylab = "")
+
+mtext(expression('Rank'), side = 1,
+      outer = FALSE, cex = 1.25, line = 4, adj = 0.5)
+
+mtext(expression('Relative Abundance'), side = 2,
+      outer = FALSE, cex = 1.25, line = 4, adj = 0.5)
+
+box(lwd = 1.5)
+
+# add lines for DNA-based SADs (color = red)
+for(i in 2:dim(rank.DNA)[2]){ # number of lines to draw 
+  points(rank.DNA[,1], rank.DNA[,i ], 
+         col = rgb(1, 0, 0, 0.5), cex = 0.2, type = "l", lwd = 1.5)
+}
+
+# add lines for DNA-based SADs (color = blue)
+for(i in 2:dim(rank.RNA)[2]){ # number of lines to draw 
+  points(rank.RNA[,1], rank.RNA[,i ], 
+         col = rgb(0, 0, 1, 0.5), cex = 0.2, type = "l", lwd = 1.5)
+}
+
+legend(3500, 0.085, legend=c("DNA", "RNA"), box.lty = 0,
+       col=c("red", "blue"), lty=1, cex = 1.0)
+
+dev.copy2pdf(file="~/Github/seedSAD/figures/Fig1.AllSADs.pdf",
+    width = 6, height = 4, bg = "white", compress = F, out.type = "pdf")
+```
