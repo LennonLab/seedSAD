@@ -221,7 +221,8 @@ for (i in 2:ncol(rank.DNA)){
   plot(rank.DNA[,1], rank.DNA[,i],
          col = "red", cex = 0.2, type = "l", lwd = 1.5, las = 1,
          xlim = c(0, 8000), ylim = c(0.000001, 0.1), log = "y",
-         axes = T, xlab = "Rank", ylab = "Relative Abundance")
+         axes = T, xlab = "Rank", ylab = "Relative Abundance", 
+         main = colnames(rank.DNA[i]))
   
   legend(2500, 0.085, legend=c("DNA", "RNA"), box.lty = 0,
        col=c("red", "blue"), lty=1, cex = 1.0)
