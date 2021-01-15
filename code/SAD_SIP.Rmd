@@ -1,0 +1,202 @@
+rm(list=ls())
+getwd()
+setwd("/Users/zta/Documents/R/R projects/new Jay") #sets new working directory
+
+# 1) load data
+data_raw<-read.csv(file="20131106_SIP-OTU.txt",head=TRUE,sep ="\t",row.names=1)
+
+# 2) Separate taxonomic info from sequences
+taxonomy<-data_raw[,1:6] # taxonmic info
+data<-data_raw[,7:ncol(data_raw)] #  abudance data
+
+# 3) #Removing data
+data<-data.frame(data[,1:16],data[,18:ncol(data)]) # missing sample (DF t0 rep 3 = "NA")
+row.has.na <- apply(data, 1, function(x){any(is.na(x))}) # determine whether row has NA
+sum(row.has.na) # how many rows have an NA
+data <- data[!row.has.na,] # removes rows with NA
+
+# 4) Convert to Relative Abundance
+dataREL=data
+for(i in 1:ncol(data)){dataREL[,i]=data[,i]/sum(data[,i])*100}
+
+# 5) Make an OTU column
+dataREL<-data.frame(OTU=1:nrow(dataREL),dataREL=dataREL) # add OTU column and merge dataREL
+dim(dataREL)
+head(dataREL)
+
+# 6) Pick paired samples you want to plot; e.g. 2=T1.R1, 14=DF.R1 19=CF.R1
+i=4  # careful with step 6 and step 7: make sure you're working with the right paired samples
+
+
+
+######here is the shift in code
+
+cur<-cbind(dataREL[,1],dataREL[,i],dataREL[,(i+1)]) # matrix with OTU, t0, and tF sample
+
+# 7) Identify and remove zeros that occur in both t0 and tf 
+z<-dataREL[i]+dataREL[i+1] # sum of rel abundances in t0 and tf
+cur<-cbind(cur,z) # add z to existing matrix
+colnames(cur)<-c(colnames(dataREL[1]),colnames(dataREL[i]),colnames(dataREL[i+1]),"zeroes") # Rename columns matrix
+cur<-cur[cur$zeroes>0,] # keep all rows of matrix except double zeroes
+
+# 8) Rank order based on t0
+cur<-cur[order(cur[,2],decreasing=TRUE),] # sort descending by t0 relative abundance
+rank_t0<-data.frame(rank_t0=1:nrow(cur),cur=cur) # create a rank # column for sorted t0 rel abund
+
+# 9) Rank order based on tf
+rank_tf=rank_t0[order(rank_t0[,4],decreasing=TRUE),]
+rank_tf<-data.frame(rank_tf=1:nrow(rank_tf),rank_tf=rank_tf) # create a rank column for sorted tf rel abund
+colnames(rank_tf)<-c("rank_tf","rank_t0",colnames(dataREL[1]),colnames(dataREL[i]),colnames(dataREL[i+1]),"zeroes") # Rename columns of new matrix
+
+
+### new Stuart plotting
+### plot logged with labels like Zach wants
+# time final colors within ties based on T0 rank
+colorT0=c(heat.colors(nrow(rank_t0)-sum(rank_t0[,3]==0)),rep('black',sum(rank_t0[,3]==0)))
+
+# time final colors within ties based on T0 rank
+colorTF=colorT0[order(rank_t0[,4],decreasing=TRUE)]
+
+# time final colors within ties with no effect of initial ranking
+colorTF=colorT0[order(rank_t0[,4],sample((1:length(colorT0)),length(colorT0)),decreasing=TRUE)]
+quartz() 
+plot(rank_t0[,1],rank_t0[,3]+0.01,pch=16,col=colorT0,log="y",yaxt="n", ylim=c(0.01,10),xlim=c(10,1210), xlab="Rank",ylab="Relative abundance (%)")
+axis(side=2,at=c(0.01,0.1,1,10),labels=c("0.01","0.1","1","10"),las=1)
+abline(h=0.05, lty=2, col="black") # adds threshold for rare taxa
+
+quartz()
+ylim=c(0.01,10) 
+plot(rank_tf[,1],rank_tf[,5]+0.01,pch=16,col=colorTF,log="y",yaxt="n",ylim=c(0.01,10),xlim=c(10,1210), xlab="Rank",ylab="Relative abundance (%)")
+axis(side=2,at=c(0.01,0.1,1,10),labels=c("0.01","0.1","1","10"),las=1)
+abline(h=0.05, lty=2, col="black") # adds threshold for rare taxa
+
+###stop here
+# Stuart plotting
+colorT0=c(heat.colors(nrow(rank_t0)-sum(rank_t0[,3]==0)),rep('black',sum(rank_t0[,3]==0)))
+
+# time final colors within ties based on T0 rank
+colorTF=colorT0[order(rank_t0[,4],decreasing=TRUE)]
+
+# time final colors within ties with no effect of initial ranking
+colorTF=colorT0[order(rank_t0[,4],sample((1:length(colorT0)),length(colorT0)),decreasing=TRUE)]
+
+#arithmetic y-axis
+plot(rank_t0[,1],rank_t0[,3],pch=16,col=colorT0)
+quartz()
+plot(rank_tf[,1],rank_tf[,5],pch=16,col=colorTF)
+
+#log10 y-axis
+plot(rank_t0[,1],log10(rank_t0[,3]+0.01),pch=16,col=colorT0)
+quartz()
+plot(rank_tf[,1],log10(rank_tf[,5]+0.01),pch=16,col=colorTF)
+
+
+
+
+
+
+
+
+
+
+
+# 10) Create variables for taxa recovered at t0 (i.e., nonrare)
+nonrare<-rank_tf[rank_tf[,4]>0,] # subsets based on taxa at t0 with non-zero relative abundances
+nonrare_OTU<-nonrare[,3] # OTU number for nonrare
+nonrare_rank_t0<-nonrare[,2] # rank of each nonrare OTU at t0
+nonrare_rank_tf<-nonrare[,1] # rank of each nonrare OTU at tf
+nonrare_relab_t0<-nonrare[,4] # rel abund of nonrare OTU at t0
+nonrare_relab_tf<-nonrare[,5] # rel abund of nonrare OTU at tf
+
+# 11) Create variables for taxa below detections at t0 (i.e., rare)
+rare<-rank_tf[rank_tf[,4]==0,] # subsets based on taxa at t0 with zero relative abundances (i.e., below detection)
+sum(rare[,4]) # should be zero
+rare_OTU<-rare[,3] # OTU number for rare
+rare_rank_t0<-rare[,2] # rank of each rare OTU at t0; should be tacked onto the end of max(nonrare_rank_t0)
+rare_rank_tf<-rare[,1] # rank of each rare OTU at tf
+rare_relab_t0<-rare[,4] # rel abund of rare taxa at t0; confirm sum(rare_relab_t0) = 0 
+rare_relab_tf<-rare[,5] # rel abund of rare OTU at tf
+miss<-0.02 # arbitrary value assigned to relative abundance for taxa below detection; for graphing on log scales
+rare_relab_t0<-as.data.frame(lapply(rare_relab_t0,function(x){replace(x,x==0,miss)})) # CAREFUL IF DOING STATS
+
+# 12) Create a vector of colors proportional to relative abundance of nonrare taxa at t0
+nonrare_mat<-data.frame(OTU=nonrare_OTU,rank_t0=nonrare_rank_t0,rank_tf=nonrare_rank_tf,relab_t0=nonrare_relab_t0,relab_tf=nonrare_relab_tf)# just defining matrix # title goes before equals statement
+nonrare_mat$colors<-heat.colors(length(nonrare_relab_t0)) #defining color vector based on nonrare_relab
+colors<-cbind(nonrare_mat) # merges nonrare matrix with color vector
+
+#  ---START PLOTTING---
+# 13) Assigns tick values for log transformation
+pwrs<-10^((floor(log10(min(rare_relab_t0))):ceiling(log10(1.4)))) 
+
+par(mfrow=c(1,2)) # sets up multipannel fig; 1 row, 2 columns
+
+plot(colors$rank_t0,colors$relab_t0,log="y",yaxt="n",ylim=c(min(pwrs),max(pwrs)),xlim=c(1,nrow(rank_tf)),pch=16,cex=1.2,col=colors$colors,xlab="Rank",lwd=3,ylab="Relative Abundance @ t0",main=colnames(dataREL)[i])
+
+axis(side=2,at=pwrs,labels=as.character(pwrs),las=1) #adds log-transformed tick back
+
+points(rare_rank_t0,rare_relab_t0,pch=16,col='black',bg='black',cex=1.2) # add tf samples; tf unshared taxa are going to be zeroes and won't show up on log transformed axis. 
+
+abline(h=0.05, lty=2, col="black") # adds threshold for rare taxa
+
+# 14) Subsetting for tf rank abundance curves
+shared<-colors[colors[,5]>0,] # subsets for OTUs with relative abundances at tf >0
+shared_rank<-shared[,3] # ranks of shared OTUs at tf
+shared_relab<-shared[,5] # rel abundance of shared OTUs at tf
+
+unshared<-rank_tf[rank_tf[,4]==0,] # subsets for OTUs at t0 that were below detection
+unshared_rank<-unshared[,1] # tf ranks of OTUs that were below detection at t0
+unshared_relab<-unshared[,5] # tf rel abundances of OTUs that were below detection at t0
+
+# 15) "Rare" (i.e., below detection) taxa at tf that were present at t0
+lost<-colors[colors[,5]==0,] # subsets for OTUs with relative abundances at tf=0
+lost_rank<-lost[,3] # tf ranks of OTUs that were below detection 
+lost_relab<-lost[,5] # tf relab of OTUs that were below detection
+miss2<-0.02
+lost_relab<-as.data.frame(lapply(lost_relab,function(x){replace(x,x==0,miss2)}))
+
+plot(shared_rank,shared_relab,log="y",yaxt="n",ylim=c(min(pwrs),max(pwrs)),xlim=c(1,nrow(rank_tf)),pch=16,cex=1.2,col=shared$colors,xlab="Rank",lwd=3,ylab="Relative Abundance @ tf",main=colnames(dataREL)[i])
+
+axis(side=2,at=pwrs,labels=as.character(pwrs),las=1) #adds log-transformed tick back
+
+points(unshared_rank,unshared_relab,pch=16,cex=1.2,col='black',bg='black') # add tf samples; tf unshared taxa are going to be zeroes and won't show up on log transformed axis. 
+
+points(lost_rank,lost_relab,pch=16,cex=1.2,col=lost$colors) # add points for "lost" taxa
+
+abline(h=0.05, lty=2, col="black") # adds threshold for rare taxa
+
+
+
+
+
+
+
+
+
+# Make rank abundance curves with log-transformed axis (see url at bottom)
+pwrs<-10^((floor(log10(min(rare_relab))):ceiling(log10(max(nonrare_relab))))) #assigns tick values
+
+plot(nonrare_rank,nonrare_relab,log="y",yaxt="n",ylim=c(min(pwrs),max(pwrs)),xlim=c(1,nrow(cur)),type='l',col="black",xlab="Rank",lwd=8,ylab="Relative Abundance @ T0",main=colnames(dataREL)[i])
+
+axis(side=2,at=pwrs,labels=as.character(pwrs),las=1) #adds log-transformed tick back
+
+points(rare_rank,rare_relab,type='l',lwd=8,col='red') # add tf samples; tf unshared taxa are going to be zeroes and won't show up on log transformed axis. 
+
+
+
+# --> just plotted t0; 
+# now create new plot with
+	#shared points with their new rank, but old colors
+		# create new matrix that pulls out t0 rank and t0 color for shared
+		# merge this with the tf rank for the shared taxa
+		# plot the shared points by their tf rank, but with t0 color
+	#unsahred points with their ranks
+		# add unshared tf points to RAD as black
+
+
+### solid t0 line and points with red tfinal points
+plot(ranks(log10[cur[,1]>0],cur[cur[,1]>0,1],type='o',cex=1,col="black",lwd=2.5,pch=19,xlab="Rank",ylab="Relative Abundance @ T0",main=colnames(dataREL)[i],xlim=range(ranks))
+points(ranks[cur[,2]>0],cur[cur[,2]>0,1],pch=16,cex=0.5,col='red')
+
+
+# References
+# http://r.789695.n4.nabble.com/Fwd-Re-Plotting-log-axis-with-the-exponential-base-to-a-plot-with-the-default-logarithm-base-10-td2172435.html
