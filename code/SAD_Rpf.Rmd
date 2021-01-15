@@ -1,0 +1,179 @@
+---
+title: "SAD with a seed bank"
+author: "Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+header-includes:
+   - \usepackage{array}
+   - \usepackage{graphics}
+output:
+  pdf_document:
+  fig_caption: true
+---
+
+# Initial Setup
+```{r results='hide', message=FALSE}
+rm(list=ls())
+setwd("~/GitHub/seedSAD/")
+
+# Import Scripts
+source("bin/DiversityFunctions.r")
+```
+
+# Background
+
+Data are from experiment where Rpf was added to soils containing Brassica.
+After applying Rpf for 6 weeks, we sequenced RNA and DNA 16S.
+
+# Load sequence data
+
+```{r}
+# Define inputs
+shared <- "data/Rpf/mothur/output/Brassica.bac.final.shared"
+design.in <- "data/Rpf/data/design.txt"
+level  <-  "0.03"
+
+# Import shared file
+OTU <- read.otu(shared, "0.03")
+
+# Remove OTUs with less than two occurrences across all sites 
+OTU <- OTU[, which(colSums(OTU) >= 2)]
+
+# Remove mock community 
+OTU <- OTU[1:20, ]  
+```
+
+# Load experimental design
+
+```{r}
+# Import design
+design <- read.delim(design.in, header = T, row.names = 1)
+
+# Match OTU matrix and design
+design_red <- design[which(rownames(design) %in% rownames(OTU)),]
+
+# Order by Rpf treatment then sample pairing
+redesign <- design_red[order(design_red$treatment, design_red$pair),]
+
+# Sort OTU matrix by treatment orderings
+OTU.match <- OTU[match(row.names(redesign), row.names(OTU)),]
+```
+
+# Create SADs
+
+```{r}
+# Raw abundance OTU matrix
+OTU <- OTU.match
+
+# Presence-absence OTU matrix
+dataPA <- (OTU > 0)*1
+
+# Relative abundance OTU matrix
+dataREL <- OTU
+  for(i in 1:nrow(OTU)){
+  dataREL[i,] = OTU[i,]/sum(OTU[i,])
+}
+
+# Function for ranking OTUs
+RAC <- function(x = ""){
+  x = as.vector(x)
+  x.ab = x[x > 0]
+  x.ab.ranked = x.ab[order(x.ab, decreasing = TRUE)]
+  return(x.ab.ranked)
+}
+
+# Apply RAC function to relative abundance matrix
+ranks <- apply(dataREL, 1, RAC)
+
+# Convert list of OTU ranks (with different lengths) to a data frame
+rank.df <- sapply(ranks, "length<-", max(lengths(ranks))) 
+
+# Create single rank vector for all samples 
+max.rank <- lengths(ranks)
+rank.vector<- seq(1, max(max.rank),1)
+
+# # Parse out samples using grep
+# rank.DNA <- rank.df[,grep("BrassicaD", colnames(rank.df), value = TRUE)]
+# rank.DNA <- data.frame(rank.vector, rank.DNA)
+# 
+# rank.RNA <- rank.df[,grep("BrassicaC", colnames(rank.df), value = TRUE)]
+# rank.RNA <- data.frame(rank.vector, rank.RNA)
+
+# DNA sequences for -Rpf (ctr) and +Rpf (rpf)
+rank.ctr <- data.frame(rank.vector, rank.df[,6:10])
+rank.rpf <- data.frame(rank.vector, rank.df[,16:20])
+```
+
+# Plot SADs
+
+Plotting all SADs for DNA, where samples are paired by +Rpf and -Rpf treatment
+
+```{r}
+# Initiate file export
+# pdf("figures/Fig1.AllSADs.pdf", width = 5, height = 5)
+# 
+# # Set up basic plotting dimensions
+# opar <- par(no.readonly = TRUE)  # Saves plot defaults
+# par(opar)
+# par(mar = c(4.5, 5, 1, 1), oma = c(0.5, 0.5, 0.5, 0.5))
+# 
+# # Create plot 
+# plot(rank.DNA[,1], rank.DNA[,2],
+#      xlim = c(0, 8000), ylim = c(0.000001, 0.1), log = "y", type ="n",
+#      las = 1, bg = rgb(0, 0, 1, 0.5), 
+#      axes = T, xlab = "", ylab = "")
+# 
+# mtext(expression('Rank'), side = 1,
+#       outer = FALSE, cex = 1.25, line = 4, adj = 0.5)
+# 
+# mtext(expression('Relative Abundance'), side = 2,
+#       outer = FALSE, cex = 1.25, line = 4, adj = 0.5)
+# 
+# box(lwd = 1.5)
+# 
+# # Add lines for DNA-based SADs (color = red)
+# for(i in 2:dim(rank.DNA)[2]){ # number of lines to draw 
+#   points(rank.DNA[,1], rank.DNA[,i ], 
+#          col = rgb(1, 0, 0, 0.5), cex = 0.2, type = "l", lwd = 1.5)
+# }
+# 
+# # Add lines for DNA-based SADs (color = blue)
+# for(i in 2:dim(rank.RNA)[2]){ # number of lines to draw 
+#   points(rank.RNA[,1], rank.RNA[,i ], 
+#          col = rgb(0, 0, 1, 0.5), cex = 0.2, type = "l", lwd = 1.5)
+# }
+# 
+# legend(3500, 0.085, legend=c("DNA", "RNA"), box.lty = 0,
+#        col=c("red", "blue"), lty = 1, cex = 1.0)
+# 
+# #Terminate plot 
+# dev.off()
+```
+
+# Plot pairs of SADs in multipanel figure
+
+```{r}
+# Initiate file export
+
+pdf("~/GitHub/seedSAD/figures/SAD_Rpf_paired.pdf", width = 5, height = 5)
+
+# Multiplot orientation
+par(mfrow = c(2, 2)) # four plots per page 
+
+for (i in 2:ncol(rank.ctr)){
+  plot(rank.ctr[,1], rank.ctr[,i],
+         col = "red", cex = 0.2, type = "l", lwd = 1.5, las = 1,
+         xlim = c(0, 8000), ylim = c(0.000001, 0.1), log = "y",
+         axes = T, xlab = "Rank", ylab = "Relative Abundance", 
+         main = colnames(rank.ctr[i]))
+
+  legend(2500, 0.085, legend=c("-Rpf", "+Rpf"), box.lty = 0,
+       col=c("red", "blue"), lty = 1, cex = 1.0)
+
+  points(rank.rpf[,1], rank.rpf[,i], col = "blue", cex = 0.2, 
+         type = "l", lwd = 1.5)
+}     
+
+# Close plot device
+dev.off()
+graphics.off()
+```

@@ -15,15 +15,6 @@ output:
 rm(list=ls())
 setwd("~/GitHub/seedSAD/")
 
-# Save Default Plot Settings
-#opar <- par(no.readonly = TRUE)  # Saves plot defaults
-
-# Import Required Packages
-library("png")
-library("grid")
-#library("vegan")
-#library("labdsv")
-#library("car")
 
 # Import Scripts
 source("bin/DiversityFunctions.r")
@@ -40,15 +31,15 @@ Here, we construct species abundance curves for each sample.
 Goal: determine if RNA-based SAD is different from DNA-based SAD. 
 What is the best SAD to fit the data? (lognormal, Zipf, logseries, broken stick)?
 Are parameters for a given model different when comparing RNA and DNA. 
-Xiaotian suggegsts looking into Gambin model.
+Xiaotian suggests looking into Gambin model.
 Also, Wasserstein distance between each SAD pair applied in deep learning.
 
 # Load data
 
 ```{r}
 # Define inputs
-shared <- "data/EC.bac.final.shared"
-design.in <- "data/design.txt"
+shared <- "data/EC/EC.bac.final.shared"
+design.in <- "data/EC/design.txt"
 level  <-  "0.03"
 
 # Import shared file
@@ -100,21 +91,21 @@ design <- read.delim(design.in, header = T, row.names = 1)
 design_red <- design[which(rownames(design) %in% rownames(ec_data_red)),]
 
 # Create factors for model
-slope <- design_red$slope # factor 1
-molecule <- design_red$molecule # factor 2
-paired <- design_red$paired_across_slope
-site <- design_red$site
-station <- design_red$station
-slope.molecule <- data.frame(cbind(as.character(slope),
-                  as.character(molecule))) # Y matrix with factor 1 and 2
-slope.molecule.concat <- do.call(paste, 
-                                 c(slope.molecule[c("X1", "X2")],
-                                   sep = "")) # create unique treat ID vector
-
-# Create a vector of molecules by station
-station.molecule.concat <- paste(station, molecule, sep = "")
-pair.station <- c(rep(seq(1:9), each=2), rep(seq(1:5), each=2), 
-                  rep(seq(1:10), each=2), rep(seq(1:9), each=2))
+# slope <- design_red$slope # factor 1
+# molecule <- design_red$molecule # factor 2
+# paired <- design_red$paired_across_slope
+# site <- design_red$site
+# station <- design_red$station
+# slope.molecule <- data.frame(cbind(as.character(slope),
+#                   as.character(molecule))) # Y matrix with factor 1 and 2
+# slope.molecule.concat <- do.call(paste, 
+#                                  c(slope.molecule[c("X1", "X2")],
+#                                    sep = "")) # create unique treat ID vector
+# 
+# # Create a vector of molecules by station
+# station.molecule.concat <- paste(station, molecule, sep = "")
+# pair.station <- c(rep(seq(1:9), each=2), rep(seq(1:5), each=2), 
+#                   rep(seq(1:10), each=2), rep(seq(1:9), each=2))
 ```
 
 # Create SADs
@@ -168,7 +159,7 @@ Does not take into account station, pairing, etc.
 
 ```{r}
 # Initiate file export
-pdf("figures/Fig1.AllSADs.pdf", width = 5, height = 5)
+pdf("figures/SAD_EC_All.pdf", width = 5, height = 5)
 
 # Set up basic plotting dimensions
 opar <- par(no.readonly = TRUE)  # Saves plot defaults
@@ -212,7 +203,7 @@ dev.off()
 
 ```{r}
 # Initiate file export
-pdf("figures/Fig2.multiSADpaired.pdf", width = 5, height = 5)
+pdf("figures/SAD_EC_paired.pdf", width = 5, height = 5)
 
 # Multiplot orientation
 par(mfrow = c(2, 2)) # four plots per page 
@@ -227,9 +218,11 @@ for (i in 2:ncol(rank.DNA)){
   legend(2500, 0.085, legend=c("DNA", "RNA"), box.lty = 0,
        col=c("red", "blue"), lty=1, cex = 1.0)
         
-  points(rank.RNA[,1], rank.RNA[,j], col = "blue", cex = 0.2, 
+  points(rank.RNA[,1], rank.RNA[,i], col = "blue", cex = 0.2, 
          type = "l", lwd = 1.5)
 }
          
+# Close plot device
 dev.off()
+graphics.off()
 ```
