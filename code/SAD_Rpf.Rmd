@@ -23,6 +23,7 @@ source("bin/DiversityFunctions.r")
 
 Data are from experiment where Rpf was added to soils containing Brassica.
 After applying Rpf for 6 weeks, we sequenced RNA and DNA 16S.
+Kuo et al. (2020)
 
 # Load sequence data
 
@@ -166,13 +167,52 @@ for (i in 2:ncol(rank.ctr)){
          axes = T, xlab = "Rank", ylab = "Relative Abundance", 
          main = colnames(rank.ctr[i]))
 
-  legend(2500, 0.085, legend=c("-Rpf", "+Rpf"), box.lty = 0,
-       col=c("red", "blue"), lty = 1, cex = 1.0)
+  legend(5000, 0.095, legend=c("-Rpf", "+Rpf"), box.lty = 0,
+       col=c("red", "blue"), lty = 1, cex = 0.8)
 
   points(rank.rpf[,1], rank.rpf[,i], col = "blue", cex = 0.2, 
          type = "l", lwd = 1.5)
 }     
 
+# Close plot device
+dev.off()
+graphics.off()
+```
+
+# Make Preston-like SADs
+
+```{r}
+# Using `sads` package to cacluate octave frequencies
+require("sads")
+
+# Split up OTU matrix by DNA and RNA
+otu.cont <- OTU[grep("D1|D2|D3|D4|D5", rownames(OTU), value = TRUE),]
+otu.rpf <- OTU[grep("DR1|DR2|DR3|DR4|DR5", rownames(OTU), value = TRUE),]
+
+# Calculate octave frequency for abundance classes 
+oct.cont <- apply(otu.cont, 1, octav)
+oct.rpf <- apply(otu.rpf, 1, octav)
+
+# Initiate file export
+pdf("figures/SAD_Rpf_dist.pdf", width = 5, height = 5)
+
+# Multiplot orientation
+par(mfrow = c(2, 2)) # four plots per page 
+
+for (i in 1:length(oct.cont)){
+  plot(unlist(oct.cont[[i]][1] - 0.25), unlist(oct.cont[[i]][3]),
+         col = "red", cex = 0.2, type = "h", lwd = 3, las = 1,
+         xlim = c(0, 15), ylim = c(0, 3000),
+         axes = T, xlab = "log2(Abundance class)", ylab = "N of species",
+         main = names(oct.cont[i]))
+  
+  legend(6, 2000, legend = c("-Rpf", "+Rpf"), box.lty = 0,
+       col=c("red", "blue"), lty = 1, cex = 1.0)
+        
+  points(unlist(oct.rpf[[i]][1] + 0.25), unlist(oct.rpf[[i]][3]), col = "blue", 
+         cex = 0.2, type = "h", lwd = 4)
+}
+         
 # Close plot device
 dev.off()
 graphics.off()

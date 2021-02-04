@@ -63,8 +63,12 @@ ec_data3 <- ec_data2[-c(which(rownames(ec_data2) %in%
 ec_data4 <- ec_data3[-c(which(rownames(ec_data3) %in% 
                      c("EC_2A_R", "EC_2A_D","EC_2C_D", "EC_2D_D"))), ]
 
+# Samples that are missing their pair (and need to be removed for paired SAD)
+ec_data5 <- ec_data4[-c(which(rownames(ec_data4) %in% 
+            c("EC_1E_D","EC_2B_D","EC_2G_D", "EC_2I_R", "EC_2J_D", "EC_6I_R"))), ]
+
 # Remove OTUs with less than two observations across samples
-ec_data_red <- ec_data4[,which(colSums(ec_data4) >= 5)]
+ec_data_red <- ec_data5[,which(colSums(ec_data5) >= 5)]
 
 # Rarefied
 floor(min(rowSums(ec_data_red)))
@@ -220,6 +224,45 @@ for (i in 2:ncol(rank.DNA)){
         
   points(rank.RNA[,1], rank.RNA[,i], col = "blue", cex = 0.2, 
          type = "l", lwd = 1.5)
+}
+         
+# Close plot device
+dev.off()
+graphics.off()
+```
+
+# Make Preston-like SADs
+
+```{r}
+# Using `sads` package to cacluate octave frequencies
+require("sads")
+
+# Split up OTU matrix by DNA and RNA
+otu.DNA <- otu.matrix[grep("_D", rownames(otu.matrix), value = TRUE),]
+otu.RNA <- otu.matrix[grep("_R", rownames(otu.matrix), value = TRUE),]
+
+# Calculate octave frequency for abundance classes 
+oct.DNA <- apply(otu.DNA, 1, octav)
+oct.RNA <- apply(otu.RNA, 1, octav)
+
+# Initiate file export
+pdf("figures/SAD_EC_dist.pdf", width = 5, height = 5)
+
+# Multiplot orientation
+par(mfrow = c(2, 2)) # four plots per page 
+
+for (i in 1:length(oct.DNA)){
+  plot(unlist(oct.DNA[[i]][1] - 0.25), unlist(oct.DNA[[i]][3]),
+         col = "red", cex = 0.2, type = "h", lwd = 3, las = 1,
+         xlim = c(0, 15), ylim = c(0, 2000),
+         axes = T, xlab = "log2(Abundance class)", ylab = "N of species",
+         main = names(oct.DNA[i]))
+  
+  legend(6, 2000, legend = c("DNA", "RNA"), box.lty = 0,
+       col=c("red", "blue"), lty = 1, cex = 1.0)
+        
+  points(unlist(oct.RNA[[i]][1] + 0.25), unlist(oct.RNA[[i]][3]), col = "blue", 
+         cex = 0.2, type = "h", lwd = 4)
 }
          
 # Close plot device
